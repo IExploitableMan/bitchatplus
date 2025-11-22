@@ -235,7 +235,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 currentChannel = currentChannel,
                 nickname = nickname,
                 colorScheme = colorScheme,
-                showMediaButtons = !isGeohashTimeline
+                showMediaButtons = showMediaButtons
             )
         }
 
