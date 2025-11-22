@@ -179,8 +179,12 @@ class GossipSyncManager(
             return GCSFilter.contains(sorted, v)
         }
 
+        // Track what we send per original sender peerID (hex)
+        data class SentStats(var announce: Boolean = false, var msgCount: Int = 0)
+        val sentBySender = mutableMapOf<String, SentStats>()
+
         // 1) Announcements: send latest per peerID if remote doesn't have them
-        for ((_, pair) in latestAnnouncementByPeer.entries) {
+        for ((senderHex, pair) in latestAnnouncementByPeer.entries) {
             val (id, pkt) = pair
             val idBytes = hexToBytes(id)
             if (!mightContain(idBytes)) {
@@ -188,6 +192,7 @@ class GossipSyncManager(
                 val toSend = pkt.copy(ttl = com.bitchat.android.util.AppConstants.SYNC_TTL_HOPS)
                 delegate?.sendPacketToPeer(fromPeerID, toSend)
                 Log.d(TAG, "Sent sync announce: Type ${toSend.type} from ${toSend.senderID.toHexString()} to $fromPeerID packet id ${idBytes.toHexString()}")
+                sentBySender.getOrPut(senderHex) { SentStats() }.apply { announce = true }
             }
         }
 
@@ -199,6 +204,17 @@ class GossipSyncManager(
                 val toSend = pkt.copy(ttl = com.bitchat.android.util.AppConstants.SYNC_TTL_HOPS)
                 delegate?.sendPacketToPeer(fromPeerID, toSend)
                 Log.d(TAG, "Sent sync message: Type ${toSend.type} to $fromPeerID packet id ${idBytes.toHexString()}")
+                val senderHex = pkt.senderID.joinToString("") { b -> "%02x".format(b) }
+                sentBySender.getOrPut(senderHex) { SentStats() }.apply { msgCount += 1 }
+            }
+        }
+
+        // Summary log per sender (original packet senderID)
+        if (sentBySender.isEmpty()) {
+            Log.d(TAG, "SYNC_RESPONSE summary to $fromPeerID: nothing to send")
+        } else {
+            for ((senderHex, stats) in sentBySender) {
+                Log.d(TAG, "SYNC_RESPONSE summary to $fromPeerID for sender $senderHex: announce=${stats.announce}, messages=${stats.msgCount}")
             }
         }
     }
